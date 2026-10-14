@@ -84,8 +84,24 @@ function selectMeal(key, focus = false) {
     if (selected && focus) tab.focus();
   });
   document.querySelector('#meal-panel').setAttribute('aria-labelledby', `tab-${key}`);
-  document.querySelector('.meal-art').dataset.view = key;
-  document.querySelector('#meal-image').alt = meal.alt;
+  const art = document.querySelector('.meal-art');
+  const photo = document.querySelector('#meal-image');
+  const previousKey = art.dataset.view;
+  const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  if (previousKey !== key && !reduced && typeof photo.animate === 'function') {
+    art.querySelectorAll('.meal-transition-photo').forEach(node => node.remove());
+    const ghost = photo.cloneNode(false);
+    ghost.removeAttribute('id');
+    ghost.alt = '';
+    ghost.setAttribute('aria-hidden', 'true');
+    ghost.className = 'meal-transition-photo';
+    const positions = {breakfast:'translate(0,0)', lunch:'translate(-50%,0)', snacks:'translate(0,-50%)', dinner:'translate(-50%,-50%)'};
+    ghost.style.transform = positions[previousKey];
+    art.append(ghost);
+    ghost.animate([{opacity:1},{opacity:0}],{duration:220,easing:'ease-out'}).finished.then(() => ghost.remove()).catch(() => ghost.remove());
+  }
+  art.dataset.view = key;
+  photo.alt = meal.alt;
   document.querySelector('#meal-eyebrow').textContent = meal.eyebrow;
   document.querySelector('#meal-title').innerHTML = meal.title;
   document.querySelector('#meal-description').textContent = meal.description;
@@ -98,9 +114,10 @@ function selectMeal(key, focus = false) {
   enquiryLink.innerHTML = `Discuss ${meal.name.toLowerCase()} for your team <span aria-hidden="true">↗</span>`;
   document.querySelector('#menu-number').textContent = `${meal.number} / 04`;
   const details = document.querySelector('.meal-description');
-  details.classList.remove('is-changing');
-  void details.offsetWidth;
-  details.classList.add('is-changing');
+  if (!reduced && typeof details.animate === 'function') {
+    details.getAnimations().forEach(animation => animation.cancel());
+    details.animate([{opacity:.5,transform:'translateY(4px)'},{opacity:1,transform:'translateY(0)'}],{duration:200,easing:'ease-out'});
+  }
 }
 mealTabs.forEach((tab, index) => {
   tab.addEventListener('click', () => selectMeal(tab.dataset.meal));
@@ -133,28 +150,30 @@ const stepContainer = document.querySelector('.process-steps');
 let scrollFrame = 0;
 function renderScroll() {
   scrollFrame = 0;
-  const height = Math.max(1, root.scrollHeight - window.innerHeight);
-  const progress = Math.min(1, Math.max(0, window.scrollY / height));
-  root.style.setProperty('--scroll-progress', progress.toFixed(4));
-  header.classList.toggle('scrolled', window.scrollY > 20);
-  if (!motionPreference.matches) {
-    const photoPosition = heroPhoto.getBoundingClientRect();
-    if (photoPosition.bottom > 0 && photoPosition.top < window.innerHeight) {
-      const offset = Math.max(-12, Math.min(12, (header.offsetHeight - photoPosition.top) * .05));
-      heroPhoto.style.setProperty('--photo-y', `${offset.toFixed(1)}px`);
-      stamp.style.setProperty('--stamp-rotation', `${-8 + Math.min(10, window.scrollY / 90)}deg`);
-    }
-  }
+  // Read geometry together before writing styles, to avoid layout work per step.
+  const viewport = window.innerHeight;
+  const scrollY = window.scrollY;
+  const height = Math.max(1, root.scrollHeight - viewport);
+  const photoPosition = heroPhoto.getBoundingClientRect();
+  const headerHeight = header.offsetHeight;
+  const stepBoxes = steps.map(step => step.getBoundingClientRect());
+  const progress = Math.min(1, Math.max(0, scrollY / height));
   let active = 0;
   let distance = Infinity;
-  steps.forEach((step, index) => {
-    const box = step.getBoundingClientRect();
-    const currentDistance = Math.abs(box.top + box.height / 2 - window.innerHeight * .5);
+  stepBoxes.forEach((box, index) => {
+    const currentDistance = Math.abs(box.top + box.height / 2 - viewport * .5);
     if (currentDistance < distance) { active = index; distance = currentDistance; }
   });
+  root.style.setProperty('--scroll-progress', progress.toFixed(4));
+  header.classList.toggle('scrolled', scrollY > 20);
+  if (!motionPreference.matches && photoPosition.bottom > 0 && photoPosition.top < viewport) {
+    const offset = Math.max(-12, Math.min(12, (headerHeight - photoPosition.top) * .05));
+    heroPhoto.style.setProperty('--photo-y', `${offset.toFixed(1)}px`);
+    stamp.style.setProperty('--stamp-rotation', `${-8 + Math.min(10, scrollY / 90)}deg`);
+  }
   steps.forEach((step, index) => step.classList.toggle('is-active', index === active));
   document.querySelector('.process-current').textContent = String(active + 1).padStart(2, '0');
-  document.querySelector('.process-indicator-line').style.setProperty('--process-progress', `${((active + 1) / steps.length) * 100}%`);
+  document.querySelector('.process-indicator-line').style.setProperty('--process-scale', String((active + 1) / steps.length));
 }
 function scheduleScroll() {
   if (!scrollFrame) scrollFrame = window.requestAnimationFrame(renderScroll);
@@ -184,16 +203,3 @@ window.addEventListener('resize', () => {
 window.addEventListener('load', scheduleScroll, {once: true});
 scheduleScroll();
 
-const ribbon = document.querySelector('.flavour-ribbon');
-const ribbonPause = document.createElement('button');
-ribbonPause.type = 'button';
-ribbonPause.className = 'ribbon-control';
-ribbonPause.setAttribute('aria-pressed', 'false');
-ribbonPause.textContent = 'Pause motion';
-ribbonPause.addEventListener('click', () => {
-  const paused = ribbonPause.getAttribute('aria-pressed') !== 'true';
-  ribbonPause.setAttribute('aria-pressed', String(paused));
-  ribbonPause.textContent = paused ? 'Resume motion' : 'Pause motion';
-  ribbon.classList.toggle('is-paused', paused);
-});
-ribbon.append(ribbonPause);
