@@ -65,3 +65,135 @@ document.querySelector('#copy-enquiry').addEventListener('click', async event =>
     statusText.textContent = 'Select and copy the enquiry below, then send it to sale.nutriserve@gmail.com.';
   }
 });
+
+// Meal browsing uses one coordinated photo atlas, so every choice is immediate.
+const mealData = {
+  breakfast: { name: 'Breakfast', eyebrow: 'A GOOD BEGINNING', title: 'Start the shift.<br>Start it well.', description: 'Traditional South Indian breakfast and rice-based options for a nourishing start to the workday.', points: ['South Indian breakfast options', 'Rice-based menu choices', 'Planned around your first shift'], alt: 'Illustrative idli and vada breakfast with sambar and coconut chutney', number: '01' },
+  lunch: { name: 'Lunch', eyebrow: 'THE MIDDAY PAUSE', title: 'A complete meal.<br>A well-earned break.', description: 'Satisfying South Indian meal combinations, planned around your team’s preferences and workplace requirements.', points: ['Complete meal combinations', 'South Indian menu choices', 'Planned around your workforce'], alt: 'Illustrative South Indian lunch thali with rice, vegetables and accompaniments', number: '02' },
+  snacks: { name: 'Snacks', eyebrow: 'A LITTLE RECHARGE', title: 'A small pause.<br>A fresh burst of energy.', description: 'Discuss snack requirements as part of your customised workplace menu, planned around your employees and their breaks.', points: ['Workplace snack requirements', 'Customised menu discussions', 'Planned around team breaks'], alt: 'Illustrative tea-time snack of samosas with tea and chutney', number: '03' },
+  dinner: { name: 'Dinner', eyebrow: 'A COMFORTING FINISH', title: 'The last shift.<br>The same care.', description: 'South Indian and North Indian options, shaped around your workforce’s evening meal and shift requirements.', points: ['South Indian and North Indian options', 'Flexible dinner menu choices', 'Planned around evening shifts'], alt: 'Illustrative North Indian dinner thali with chapati, dal, vegetables and rice', number: '04' }
+};
+const mealTabs = Array.from(document.querySelectorAll('[data-meal]'));
+function selectMeal(key, focus = false) {
+  const meal = mealData[key];
+  if (!meal) return;
+  mealTabs.forEach(tab => {
+    const selected = tab.dataset.meal === key;
+    tab.setAttribute('aria-selected', String(selected));
+    tab.tabIndex = selected ? 0 : -1;
+    if (selected && focus) tab.focus();
+  });
+  document.querySelector('#meal-panel').setAttribute('aria-labelledby', `tab-${key}`);
+  document.querySelector('.meal-art').dataset.view = key;
+  document.querySelector('#meal-image').alt = meal.alt;
+  document.querySelector('#meal-eyebrow').textContent = meal.eyebrow;
+  document.querySelector('#meal-title').innerHTML = meal.title;
+  document.querySelector('#meal-description').textContent = meal.description;
+  const points = document.querySelector('#meal-points');
+  points.replaceChildren(...meal.points.map(point => {
+    const li = document.createElement('li'); li.textContent = point; return li;
+  }));
+  const enquiryLink = document.querySelector('#meal-enquire');
+  enquiryLink.dataset.pickMeal = meal.name;
+  enquiryLink.innerHTML = `Discuss ${meal.name.toLowerCase()} for your team <span aria-hidden="true">↗</span>`;
+  document.querySelector('#menu-number').textContent = `${meal.number} / 04`;
+  const details = document.querySelector('.meal-description');
+  details.classList.remove('is-changing');
+  void details.offsetWidth;
+  details.classList.add('is-changing');
+}
+mealTabs.forEach((tab, index) => {
+  tab.addEventListener('click', () => selectMeal(tab.dataset.meal));
+  tab.addEventListener('keydown', event => {
+    let next;
+    if (event.key === 'ArrowRight') next = (index + 1) % mealTabs.length;
+    else if (event.key === 'ArrowLeft') next = (index - 1 + mealTabs.length) % mealTabs.length;
+    else if (event.key === 'Home') next = 0;
+    else if (event.key === 'End') next = mealTabs.length - 1;
+    else return;
+    event.preventDefault();
+    selectMeal(mealTabs[next].dataset.meal, true);
+  });
+});
+document.querySelector('#meal-enquire').addEventListener('click', event => {
+  const selected = event.currentTarget.dataset.pickMeal;
+  form.querySelectorAll('input[name="meals"]').forEach(input => {
+    if (input.value === selected) input.checked = true;
+  });
+});
+
+// Native scrolling stays intact. Movement is small and respects motion preferences.
+const motionPreference = window.matchMedia('(prefers-reduced-motion: reduce)');
+const root = document.documentElement;
+const header = document.querySelector('.header');
+const heroPhoto = document.querySelector('.hero-photo-wrap');
+const stamp = document.querySelector('.meal-stamp');
+const steps = Array.from(document.querySelectorAll('.process-step'));
+const stepContainer = document.querySelector('.process-steps');
+let scrollFrame = 0;
+function renderScroll() {
+  scrollFrame = 0;
+  const height = Math.max(1, root.scrollHeight - window.innerHeight);
+  const progress = Math.min(1, Math.max(0, window.scrollY / height));
+  root.style.setProperty('--scroll-progress', progress.toFixed(4));
+  header.classList.toggle('scrolled', window.scrollY > 20);
+  if (!motionPreference.matches) {
+    const photoPosition = heroPhoto.getBoundingClientRect();
+    if (photoPosition.bottom > 0 && photoPosition.top < window.innerHeight) {
+      const offset = Math.max(-12, Math.min(12, (header.offsetHeight - photoPosition.top) * .05));
+      heroPhoto.style.setProperty('--photo-y', `${offset.toFixed(1)}px`);
+      stamp.style.setProperty('--stamp-rotation', `${-8 + Math.min(10, window.scrollY / 90)}deg`);
+    }
+  }
+  let active = 0;
+  let distance = Infinity;
+  steps.forEach((step, index) => {
+    const box = step.getBoundingClientRect();
+    const currentDistance = Math.abs(box.top + box.height / 2 - window.innerHeight * .5);
+    if (currentDistance < distance) { active = index; distance = currentDistance; }
+  });
+  steps.forEach((step, index) => step.classList.toggle('is-active', index === active));
+  document.querySelector('.process-current').textContent = String(active + 1).padStart(2, '0');
+  document.querySelector('.process-indicator-line').style.setProperty('--process-progress', `${((active + 1) / steps.length) * 100}%`);
+}
+function scheduleScroll() {
+  if (!scrollFrame) scrollFrame = window.requestAnimationFrame(renderScroll);
+}
+if ('IntersectionObserver' in window) {
+  const reveals = new IntersectionObserver(entries => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting) {
+        entry.target.classList.add('is-visible'); reveals.unobserve(entry.target);
+      }
+    });
+  }, {threshold: .06, rootMargin: '0px 0px -25px 0px'});
+  document.querySelectorAll('[data-reveal]').forEach(element => reveals.observe(element));
+  function syncMotion() {
+    root.classList.toggle('motion-enabled', !motionPreference.matches);
+    stepContainer.classList.toggle('motion-steps', !motionPreference.matches);
+    scheduleScroll();
+  }
+  syncMotion();
+  motionPreference.addEventListener('change', syncMotion);
+}
+window.addEventListener('scroll', scheduleScroll, {passive: true});
+window.addEventListener('resize', () => {
+  if (window.innerWidth > 760) closeMenu();
+  scheduleScroll();
+}, {passive: true});
+window.addEventListener('load', scheduleScroll, {once: true});
+scheduleScroll();
+
+const ribbon = document.querySelector('.flavour-ribbon');
+const ribbonPause = document.createElement('button');
+ribbonPause.type = 'button';
+ribbonPause.className = 'ribbon-control';
+ribbonPause.setAttribute('aria-pressed', 'false');
+ribbonPause.textContent = 'Pause motion';
+ribbonPause.addEventListener('click', () => {
+  const paused = ribbonPause.getAttribute('aria-pressed') !== 'true';
+  ribbonPause.setAttribute('aria-pressed', String(paused));
+  ribbonPause.textContent = paused ? 'Resume motion' : 'Pause motion';
+  ribbon.classList.toggle('is-paused', paused);
+});
+ribbon.append(ribbonPause);
